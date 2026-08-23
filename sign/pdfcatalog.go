@@ -38,7 +38,7 @@ func (context *SignContext) createCatalog() ([]byte, error) {
 	rootPtr := root.GetPtr()
 	context.CatalogData.RootString = strconv.Itoa(int(rootPtr.GetID())) + " " + strconv.Itoa(int(rootPtr.GetGen())) + " R"
 
-	// Copy over existing catalog entries except for type and AcroForum
+	// Copy over existing catalog entries except for type and AcroForm
 	for _, key := range root.Keys() {
 		if key != "Type" && key != "AcroForm" {
 			_, _ = fmt.Fprintf(&catalog_buffer, "  /%s ", key)
@@ -47,23 +47,70 @@ func (context *SignContext) createCatalog() ([]byte, error) {
 		}
 	}
 
-	// Start the AcroForm dictionary with /NeedAppearances
+	acroForm := root.Key("AcroForm")
+
+	// Start the AcroForm dictionary
 	catalog_buffer.WriteString("  /AcroForm <<\n")
+
+	// Carry over every AcroForm entry we do not rewrite ourselves. A form's
+	// definition lives here, and for XFA documents (Adobe LiveCycle forms, which
+	// is what tax authorities ship) /XFA holds the form's actual content. Emitting
+	// a fresh dictionary orphans all of it: the objects survive in the file but
+	// nothing references them, so the document stops being a form.
+	// Direct values report the pointer of the indirect object that contains them,
+	// so entries copied out of the AcroForm dictionary have to be serialized
+	// against the AcroForm's own id, not the catalog's.
+	acroFormPtr := acroForm.GetPtr()
+	acroFormID := acroFormPtr.GetID()
+	if acroFormID == 0 {
+		acroFormID = rootPtr.GetID()
+	}
+
+	if acroForm.Kind() == pdf.Dict {
+		for _, key := range acroForm.Keys() {
+			if key == "Fields" || key == "SigFlags" {
+				continue
+			}
+			_, _ = fmt.Fprintf(&catalog_buffer, "    /%s ", key)
+			context.serializeCatalogEntry(&catalog_buffer, acroFormID, acroForm.Key(key))
+			catalog_buffer.WriteString("\n")
+		}
+	}
+
 	catalog_buffer.WriteString("    /Fields [")
 
-	// Add existing signatures to the AcroForm dictionary
-	for i, sig := range context.existingSignatures {
-		if i > 0 {
+	// Preserve the existing field tree. Fields carry a document's interactive
+	// content, not just its signatures, so the array is rebuilt from what was
+	// there rather than from the signatures alone.
+	seen := make(map[uint32]bool)
+	wroteField := false
+	writeFieldRef := func(id uint32, gen uint16) {
+		if seen[id] {
+			return
+		}
+		seen[id] = true
+		if wroteField {
 			catalog_buffer.WriteString(" ")
 		}
-		catalog_buffer.WriteString(strconv.Itoa(int(sig.objectId)) + " 0 R")
+		catalog_buffer.WriteString(strconv.Itoa(int(id)) + " " + strconv.Itoa(int(gen)) + " R")
+		wroteField = true
+	}
+
+	if fields := acroForm.Key("Fields"); fields.Kind() == pdf.Array {
+		for i := range fields.Len() {
+			if ptr := fields.Index(i).GetPtr(); ptr.GetID() != 0 {
+				writeFieldRef(ptr.GetID(), ptr.GetGen())
+			}
+		}
+	}
+
+	// Add existing signatures to the AcroForm dictionary
+	for _, sig := range context.existingSignatures {
+		writeFieldRef(sig.objectId, 0)
 	}
 
 	// Add the visual signature field to the AcroForm dictionary
-	if len(context.existingSignatures) > 0 {
-		catalog_buffer.WriteString(" ")
-	}
-	catalog_buffer.WriteString(strconv.Itoa(int(context.VisualSignData.objectId)) + " 0 R")
+	writeFieldRef(context.VisualSignData.objectId, 0)
 
 	catalog_buffer.WriteString("]\n") // close Fields array
 
