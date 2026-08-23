@@ -102,7 +102,7 @@ func (context *SignContext) createVisualSignature(visible bool, pageNumber uint3
 	// Define the field type as a signature.
 	visual_signature.WriteString("  /FT /Sig\n")
 	// Set a unique title for the signature field.
-	visual_signature.WriteString(fmt.Sprintf("  /T %s\n", pdfString("Signature "+strconv.Itoa(len(context.existingSignatures)+1))))
+	visual_signature.WriteString(fmt.Sprintf("  /T %s\n", pdfString(context.uniqueFieldName())))
 
 	// Reference the signature dictionary.
 	visual_signature.WriteString(fmt.Sprintf("  /V %d 0 R\n", context.SignData.objectId))
@@ -200,4 +200,26 @@ func findPageByNumberRec(pages pdf.Value, pageNumber uint32) (pdf.Value, uint32,
 		return pdf.Value{}, pageNumber - 1, nil
 	}
 	return pdf.Value{}, pageNumber, fmt.Errorf("page number %d not found", pageNumber)
+}
+
+// uniqueFieldName picks a field title no other field in the document already
+// uses. Field names have to be unique, and counting signatures alone is not
+// enough: the existing field tree is preserved on signing and may already hold
+// a field by the name the counter would produce.
+func (context *SignContext) uniqueFieldName() string {
+	taken := make(map[string]bool)
+	fields := context.PDFReader.Trailer().Key("Root").Key("AcroForm").Key("Fields")
+	if fields.Kind() == pdf.Array {
+		for i := range fields.Len() {
+			if title := fields.Index(i).Key("T"); title.Kind() == pdf.String {
+				taken[title.RawString()] = true
+			}
+		}
+	}
+	for n := len(context.existingSignatures) + 1; ; n++ {
+		name := "Signature " + strconv.Itoa(n)
+		if !taken[name] {
+			return name
+		}
+	}
 }
