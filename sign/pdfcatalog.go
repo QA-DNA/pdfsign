@@ -109,8 +109,14 @@ func (context *SignContext) createCatalog() ([]byte, error) {
 		writeFieldRef(sig.objectId, 0)
 	}
 
-	// Add the visual signature field to the AcroForm dictionary
-	writeFieldRef(context.VisualSignData.objectId, 0)
+	// Add the visual signature field to the AcroForm dictionary. /Fields lists
+	// roots, so a signature written into a named hierarchy contributes its root
+	// rather than the leaf the signature itself sits on.
+	rootField := context.VisualSignData.rootFieldObjectId
+	if rootField == 0 {
+		rootField = context.VisualSignData.objectId
+	}
+	writeFieldRef(rootField, 0)
 
 	catalog_buffer.WriteString("]\n") // close Fields array
 

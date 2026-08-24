@@ -34,6 +34,14 @@ type SignData struct {
 	RevocationData     revocation.InfoArchival
 	RevocationFunction RevocationFunction
 	Appearance         Appearance
+	// FieldPath names the field the signature is written into, as the field
+	// hierarchy from the form's root down to the terminal signature field
+	// (["VATRefundApplication[0]", ..., "Semnatura[0]"]). Empty means the signer
+	// invents a field of its own, which is what a document without a signature
+	// field of its own needs. A form that declares one — every XFA declaration
+	// does — is only shown as signed by a reader that finds the signature under
+	// the name the form uses.
+	FieldPath []string
 
 	objectId uint32
 }
@@ -55,6 +63,10 @@ type Appearance struct {
 type VisualSignData struct {
 	pageObjectId uint32
 	objectId     uint32
+	// rootFieldObjectId is the object the AcroForm's /Fields array must list. It
+	// differs from objectId only when the signature is written into a named field
+	// hierarchy: /Fields holds roots, and the signature sits at a leaf.
+	rootFieldObjectId uint32
 }
 
 type InfoData struct {

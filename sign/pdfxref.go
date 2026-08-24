@@ -29,6 +29,21 @@ func (context *SignContext) getNextObjectID() uint32 {
 	return objectID
 }
 
+// nextObjectID reports the id addObject will hand to the next object, so an
+// object can reference one written after it. Writing a field hierarchy needs
+// that: a child names its parent, and the parent cannot exist first because it
+// names the child.
+func (context *SignContext) nextObjectID() uint32 {
+	if context.lastXrefID == 0 {
+		lastXrefID, err := context.getLastObjectIDFromXref()
+		if err != nil {
+			return 0
+		}
+		context.lastXrefID = lastXrefID
+	}
+	return context.lastXrefID + uint32(len(context.newXrefEntries)) + 1
+}
+
 func (context *SignContext) addObject(object []byte) (uint32, error) {
 	if context.lastXrefID == 0 {
 		lastXrefID, err := context.getLastObjectIDFromXref()

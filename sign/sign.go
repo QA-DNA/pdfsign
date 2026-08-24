@@ -217,6 +217,14 @@ func (context *SignContext) SignPDF() error {
 	if err != nil {
 		return fmt.Errorf("failed to add visual signature object: %w", err)
 	}
+	context.VisualSignData.rootFieldObjectId = context.VisualSignData.objectId
+	if len(context.SignData.FieldPath) > 1 {
+		context.VisualSignData.rootFieldObjectId, err = context.createFieldAncestors(
+			context.SignData.FieldPath, context.VisualSignData.objectId)
+		if err != nil {
+			return err
+		}
+	}
 
 	if context.SignData.Appearance.Visible {
 		inc_page_update, err := context.createIncPageUpdate(context.SignData.Appearance.Page, context.VisualSignData.objectId)

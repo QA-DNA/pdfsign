@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/digitorus/pdf"
 )
@@ -101,8 +102,22 @@ func (context *SignContext) createVisualSignature(visible bool, pageNumber uint3
 
 	// Define the field type as a signature.
 	visual_signature.WriteString("  /FT /Sig\n")
-	// Set a unique title for the signature field.
-	visual_signature.WriteString(fmt.Sprintf("  /T %s\n", pdfString(context.uniqueFieldName())))
+	if path := context.SignData.FieldPath; len(path) > 0 {
+		// The form names this field, so the signature takes that name rather than
+		// one of its own: a reader binds a signature to the field the form drew by
+		// the field's fully qualified name. /TM repeats it whole because that is
+		// what Acrobat writes, and it is the name data export uses.
+		visual_signature.WriteString(fmt.Sprintf("  /T %s\n", pdfString(path[len(path)-1])))
+		visual_signature.WriteString(fmt.Sprintf("  /TM %s\n", pdfString(strings.Join(path, "."))))
+		if len(path) > 1 {
+			// The parents are written straight after this object, innermost first,
+			// so the immediate parent is the next id the writer will hand out.
+			visual_signature.WriteString(fmt.Sprintf("  /Parent %d 0 R\n", context.nextObjectID()+1))
+		}
+	} else {
+		// Set a unique title for the signature field.
+		visual_signature.WriteString(fmt.Sprintf("  /T %s\n", pdfString(context.uniqueFieldName())))
+	}
 
 	// Reference the signature dictionary.
 	visual_signature.WriteString(fmt.Sprintf("  /V %d 0 R\n", context.SignData.objectId))
@@ -222,4 +237,29 @@ func (context *SignContext) uniqueFieldName() string {
 			return name
 		}
 	}
+}
+
+// createFieldAncestors writes the field hierarchy above a signature written into
+// a named field, innermost parent first, and returns the object id of the root —
+// the one /Fields lists. A terminal field alone would carry the right partial
+// name and the wrong fully qualified one, which is the name that has to match
+// the form's.
+func (context *SignContext) createFieldAncestors(path []string, leaf uint32) (uint32, error) {
+	child := leaf
+	for i := len(path) - 2; i >= 0; i-- {
+		var field bytes.Buffer
+		field.WriteString("<<\n")
+		field.WriteString(fmt.Sprintf("  /T %s\n", pdfString(path[i])))
+		field.WriteString(fmt.Sprintf("  /Kids [%d 0 R]\n", child))
+		if i > 0 {
+			field.WriteString(fmt.Sprintf("  /Parent %d 0 R\n", context.nextObjectID()+1))
+		}
+		field.WriteString(">>\n")
+		id, err := context.addObject(field.Bytes())
+		if err != nil {
+			return 0, fmt.Errorf("failed to add field %s: %w", path[i], err)
+		}
+		child = id
+	}
+	return child, nil
 }
