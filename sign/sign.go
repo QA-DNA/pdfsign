@@ -2,6 +2,7 @@ package sign
 
 import (
 	"crypto"
+	"errors"
 	"crypto/x509"
 	"encoding/hex"
 	"fmt"
@@ -87,6 +88,18 @@ func (context *SignContext) SignPDF() error {
 	}
 
 	context.OutputBuffer = filebuffer.New([]byte{})
+
+	// Signing can run twice: a signature larger than the estimated placeholder
+	// restarts the whole pass with a bigger one. Everything derived from a pass has
+	// to be cleared, or the second pass appends its objects to the first pass's
+	// cross-reference entries and writes a table pointing at offsets that no longer
+	// mean anything.
+	context.newXrefEntries = nil
+	context.updatedXrefEntries = nil
+	context.lastXrefID = 0
+	context.ByteRangeValues = nil
+	context.VisualSignData = VisualSignData{}
+	context.CatalogData = CatalogData{}
 
 	// Copy old file into new buffer.
 	_, err := context.InputFile.Seek(0, 0)
@@ -266,6 +279,12 @@ func (context *SignContext) SignPDF() error {
 
 	// Replace signature
 	if err := context.replaceSignature(); err != nil {
+		// The retry ran a full pass of its own, output file included. Writing again
+		// here would append a second copy of the document to the file — a signature
+		// that covers only the first half of what it is attached to.
+		if errors.Is(err, errSignedOnRetry) {
+			return nil
+		}
 		return fmt.Errorf("failed to replace signature: %w", err)
 	}
 

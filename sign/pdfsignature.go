@@ -446,7 +446,13 @@ func (context *SignContext) replaceSignature() error {
 		log.Println("Signature too long, retrying with increased buffer size.")
 		// set new base and try signing again
 		context.SignatureMaxLengthBase += (uint32(len(dst)) - context.SignatureMaxLength) + 1
-		return context.SignPDF()
+		if err := context.SignPDF(); err != nil {
+			return err
+		}
+		// That call signed the document and wrote the output. Saying so is the point:
+		// the caller above this one is mid-pass with a buffer that is now stale, and
+		// writing it too would leave the document in the file twice.
+		return errSignedOnRetry
 	}
 
 	if _, err := context.OutputBuffer.Seek(0, 0); err != nil {
@@ -527,3 +533,7 @@ func (context *SignContext) createPropBuild() string {
 
 	return buffer.String()
 }
+
+// errSignedOnRetry reports that a nested signing pass already produced the
+// output, so the pass that started it must stop rather than write its own.
+var errSignedOnRetry = errors.New("pdfsign: signed on retry")
