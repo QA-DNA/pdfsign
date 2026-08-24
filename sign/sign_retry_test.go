@@ -67,6 +67,17 @@ func TestSignatureLongerThanTheEstimateWritesTheDocumentOnce(t *testing.T) {
 		t.Fatalf("the document was written twice: %d bytes, both halves identical", len(signed))
 	}
 
+	// /Contents is a hex string: an odd digit count is malformed, and Acrobat says so
+	// while poppler pads and moves on. The retry's estimate bump is where the odd
+	// length came from.
+	contents := regexp.MustCompile(`/Contents\s*<([0-9A-Fa-f]+)>`).FindAllSubmatch(signed, -1)
+	if len(contents) == 0 {
+		t.Fatal("signed file carries no /Contents")
+	}
+	if hex := contents[len(contents)-1][1]; len(hex)%2 == 1 {
+		t.Errorf("/Contents holds %d hex digits, which is not a whole number of bytes", len(hex))
+	}
+
 	ranges := regexp.MustCompile(`/ByteRange\s*\[\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*\]`).FindAllSubmatch(signed, -1)
 	if len(ranges) == 0 {
 		t.Fatal("signed file carries no /ByteRange")

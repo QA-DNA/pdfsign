@@ -188,6 +188,15 @@ func (context *SignContext) SignPDF() error {
 		context.SignatureMaxLength += uint32(hex.EncodedLen(9000))
 	}
 
+	// A signature's /Contents is a hex string, so it has to hold an even number of
+	// digits: readers that pad an odd one silently disagree with readers that call
+	// the signature malformed, and Adobe is the second kind. Every term above is
+	// even except the +1 a retry adds, which is exactly why only real certificates —
+	// the ones long enough to trigger a retry — produced a signature Acrobat refused.
+	if context.SignatureMaxLength%2 == 1 {
+		context.SignatureMaxLength++
+	}
+
 	// Create the signature object
 	var signature_object []byte
 
