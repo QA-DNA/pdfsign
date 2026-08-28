@@ -2,9 +2,9 @@ package sign
 
 import (
 	"crypto"
-	"errors"
 	"crypto/x509"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -248,7 +248,12 @@ func (context *SignContext) SignPDF() error {
 		}
 	}
 
-	if context.SignData.Appearance.Visible {
+	// A signature widget is an annotation, and a reader that builds its field map
+	// by walking the pages (iText does, and so does every validator built on it)
+	// finds nothing unless the widget is listed in that page's /Annots. An
+	// invisible widget still has to be listed there; it is drawn as nothing, not
+	// attached to nothing.
+	if context.VisualSignData.pageObjectId > 0 {
 		inc_page_update, err := context.createIncPageUpdate(context.SignData.Appearance.Page, context.VisualSignData.objectId)
 		if err != nil {
 			return fmt.Errorf("failed to create incremental page update: %w", err)

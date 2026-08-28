@@ -79,14 +79,6 @@ func (context *SignContext) createVisualSignature(visible bool, pageNumber uint3
 	// Store the root object reference in the catalog data.
 	context.CatalogData.RootString = strconv.Itoa(int(rootPtr.GetID())) + " " + strconv.Itoa(int(rootPtr.GetGen())) + " R"
 
-	// A field the form itself declares is placed by the form's layout, not by a
-	// page of the PDF. Naming a page anyway ties an invisible widget to a page it
-	// is not listed on, and readers that regenerate the pages report the signature
-	// as living there. The signature the form draws belongs to no PDF page.
-	if !visible && len(context.SignData.FieldPath) > 0 {
-		found_pages = false
-	}
-
 	if found_pages {
 		// Find the page object by its number.
 		page, err := findPageByNumber(root.Key("Pages"), pageNumber)
