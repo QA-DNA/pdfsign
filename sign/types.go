@@ -58,6 +58,11 @@ type Appearance struct {
 
 	Image            []byte // Image data to use as signature appearance
 	ImageAsWatermark bool   // If true, the text will be drawn over the image
+
+	// Content, when set, is the whole appearance stream, drawn in a form whose
+	// /Resources dictionary holds Resources. It replaces the image and the text.
+	Content   []byte
+	Resources []byte
 }
 
 type VisualSignData struct {

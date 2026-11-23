@@ -239,6 +239,17 @@ func (context *SignContext) createAppearance(rect [4]float64) ([]byte, error) {
 		return nil, fmt.Errorf("invalid rectangle dimensions: width %.2f and height %.2f must be greater than 0", rectWidth, rectHeight)
 	}
 
+	if content := context.SignData.Appearance.Content; len(content) > 0 {
+		var custom bytes.Buffer
+		writeAppearanceHeader(&custom, rectWidth, rectHeight)
+		custom.WriteString("  /Resources <<\n")
+		custom.Write(context.SignData.Appearance.Resources)
+		custom.WriteString("\n  >>\n")
+		writeFormTypeAndLength(&custom, len(content))
+		writeAppearanceStreamBuffer(&custom, content)
+		return custom.Bytes(), nil
+	}
+
 	hasImage := len(context.SignData.Appearance.Image) > 0
 	shouldDisplayText := context.SignData.Appearance.ImageAsWatermark || !hasImage
 
